@@ -1,0 +1,45 @@
+version: '3.7'  # 指定 Docker Compose 的版本格式（雖然新版已經不強制，但可保留）
+
+
+services:  # 定義要啟動的服務（container），這裡有 elasticsearch、kibana、logstash
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.18  # 指定使用的 Elasticsearch Docker 映像檔
+    container_name: elasticsearch       # 容器名稱（方便管理）
+    environment:
+      - discovery.type=single-node      # 設定為單節點模式，不需要叢集自動發現（開發環境用）
+      - xpack.security.enabled=false    # 關閉安全功能（如認證、加密），避免帳號密碼設定麻煩
+    ports:
+      - 9200:9200                       # 將容器的 9200 port 映射到主機，供 Kibana 或你本機查詢用
+    networks:
+      - elk                             # 加入名為 "elk" 的虛擬網路，讓其他 container 可直接連線
+
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.18   # 使用官方 Kibana 映像
+    container_name: kibana         # 容器名稱
+    ports:
+      - 5601:5601                  # 映射 5601 port（Kibana 的 Web 介面）
+    networks:
+      - elk                        # 同樣加入 elk 虛擬網路（讓 Kibana 可以存取 Elasticsearch）
+    depends_on:
+      - elasticsearch              # Kibana 啟動前會等 Elasticsearch 準備好
+
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.17.18   # 使用官方 Logstash 映像
+    container_name: logstash          # 容器名稱
+    volumes:
+      - ./logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf  # 把你本機的 logstash 設定檔掛進容器
+      - ./cowrie-data/:/var/log/cowrie/   # 把 Cowrie 的 log 資料夾掛進容器內指定路徑（供 logstash 調用）
+    ports:
+      - 5044:5044                  # 暴露 5044 port（通常給 Beats 等其他來源傳 log 用）
+    networks:
+      - elk                        # 加入同一個 elk 網路
+    depends_on:
+      - elasticsearch              # 確保 Elasticsearch 啟動後再啟動 Logstash
+
+
+networks:
+  elk:                              # 定義名為 elk 的虛擬網路，供三個容器互相連線
+
